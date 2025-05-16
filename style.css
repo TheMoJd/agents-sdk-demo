@@ -1,76 +1,109 @@
-body,
-* {
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-    overflow: hidden;
+/* Reset minimal */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: system-ui, sans-serif;
 }
 
-
-button {
-    font-size: 16px;
+/* Conteneur racine */
+#app {
+  position: relative;
+  max-width: 1280px;
+  height: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
 }
 
-div {
-    margin: 10px;
+/* Plein écran : étend le conteneur */
+#app.fullscreen {
+  width: 100%;
+  height: 100%;
 }
 
-#container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    font-size: 16px;
-    /* height: 500px; */
-    justify-content: space-around;
-    margin: 0 auto;
-    width: 75%;
-}
-
+/* Barre de titre */
 .header {
-    display: flex;
-    flex-direction: column;
-    align-items: center
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: .5rem 1rem;
+  background: #f4f4f4;
+  user-select: none;
 }
 
-#previewName {
-    font-size: 20px
+#previewName { font-weight: 600; }
+#connectionLabel { font-size: .9rem; color: #666; margin-left: auto; }
+
+/* Vidéo */
+#avatarVideo {
+  width: 100%;
+  height: 100%;
+  background: #000 url("data:image/gif;base64,R0lGODlhAQABAIAAAAUEBA==") center/contain no-repeat;
+  object-fit: cover;
 }
 
-#connectionLabel {
-    font-weight: lighter;
-    font-size: smaller;
-    display: inline-block
-}
-
-.inputsDiv {
-    display: flex;
-    max-width: 500px;
-    min-width: 45%;
+/* Overlay UI */
+#uiOverlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  padding: 1rem;
+  backdrop-filter: blur(6px) brightness(0.9);
+  background: rgba(0,0,0,.35);
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  z-index: 2147483647;
 }
 
 #textArea {
-    width: 100%;
+  width: 100%;
+  min-height: 3.5rem;
+  padding: .5rem;
+  resize: none;
+  border-radius: .5rem;
+  border: none;
+  font-size: 1rem;
 }
 
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+button, select {
+  font-size: 1rem;
+  padding: .4rem .75rem;
+  border-radius: .4rem;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+}
+
+button:disabled, select:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Historique */
 #answers {
-    height: 450px;
-    overflow: scroll;
+  position: absolute;
+  right: 0;
+  top: 4rem;
+  width: 26rem;
+  max-height: calc(100% - 6rem);
+  overflow-y: auto;
+  padding: 1rem;
+  font-size: .9rem;
+  background: rgba(255,255,255,.85);
+  backdrop-filter: blur(4px);
+  border-left: 1px solid #ddd;
+  display: none;   /* enlever si vous voulez toujours voir l’historique */
 }
 
+/* Panneau hidden */
 #hidden {
-    text-align: center;
-}
-
-#speechButton {
-    color: black;
-}
-
-#speechButton:disabled {
-    color: rgba(16, 16, 16, 0.3)
-}
-
-#videoElement {
-    width: 250px;
-    height: 250px;
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
+  text-align: center;
+  margin-top: 2rem;
 }

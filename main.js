@@ -1,221 +1,225 @@
-// CSS import
-import './style.css'
+//main.js
+import './style.css';
+import * as sdk from '@d-id/client-sdk';
 
-// 1. Import the Agents SDK library
-import * as sdk from "@d-id/client-sdk"
+/**
+ * Remplacez ces deux variables par vos propres identifiants
+ * — ou chargez-les via des variables d’environnement lors du build.
+ */
+const agentId = 'agt_5N-mOCiJ';
+const auth    = {
+  type: 'key',
+  clientKey: 'Z29vZ2xlLW9hdXRoMnwxMDgyMTQyNDYwODUxNzY4NTE0MDI6Z3dDWVJKVElRaEJPRmEzUlVEVFcx'
+};
 
-// 2. Paste the `data-agent-id' in the 'agentId' variable
-let agentId = ""
+// Sélecteurs DOM
+const videoElement   = document.querySelector('#avatarVideo');
+const textArea       = document.querySelector('#textArea');
+const langSelect     = document.querySelector('#langSelect');
+const answers        = document.querySelector('#answers');
+const chatBtn        = document.querySelector('#chatButton');
+const speakBtn       = document.querySelector('#speakButton');
+const speechBtn      = document.querySelector('#speechButton');
+const reconnectBtn   = document.querySelector('#reconnectButton');
+const connectionLbl  = document.querySelector('#connectionLabel');
+const hiddenPanel    = document.querySelector('#hidden');
+const hiddenTitle    = document.querySelector('#hidden_h2');
+const fullscreenBtn  = document.querySelector('#fullscreenButton');
+const app            = document.querySelector('#app');
 
-// 3. Paste the 'data-client-key' in the 'auth.clientKey' variable
-let auth = { type: 'key', clientKey: "" };
+let srcObject;               // bufferise le MediaStream
+let agentManager;            // instance retournée par le SDK
+let recognizing = false;     // état STT (géré dans webSpeechAPI.js)
 
-// HTML Variables declaration
-let videoElement = document.querySelector("#videoElement")
-let textArea = document.querySelector("#textArea")
-let langSelect = document.querySelector("#langSelect")
-let speechButton = document.querySelector("#speechButton");
-let answers = document.querySelector("#answers")
-let connectionLabel = document.querySelector("#connectionLabel")
-let chatButton = document.querySelector('#chatButton')
-let speakButton = document.querySelector('#speakButton')
-let reconnectButton = document.querySelector('#reconnectButton')
-let srcObject
-
-// 4. Define the SDK callbacks functions in this object
+/* ========================================================= */
+/* 1. Callbacks SDK                                           */
+/* ========================================================= */
 const callbacks = {
-
-    // Link the HTML Video element with the WebRTC Stream Object (Video & Audio tracks)
-    onSrcObjectReady(value) {
-        console.log("onSrcObjectReady():", value)
-        videoElement.srcObject = value
-        srcObject = value
-        return srcObject
-    },
-
-    // Connection States callback method
-    onConnectionStateChange(state) {
-
-        console.log("onConnectionStateChange(): ", state)
-
-        if (state == "connecting") {
-            connectionLabel.innerHTML = "Connecting.."
-            document.querySelector("#container").style.display = "flex"
-            document.querySelector("#hidden").style.display = "none"
-        }
-
-        else if (state == "connected") {
-            // Setting the 'Enter' Key to Send a message
-            textArea.addEventListener('keypress', (event) => { if (event.key === "Enter") { event.preventDefault(); chat() } })
-            chatButton.removeAttribute("disabled")
-            speakButton.removeAttribute("disabled")
-            langSelect.removeAttribute("disabled")
-            speechButton.removeAttribute("disabled")
-            connectionLabel.innerHTML = "Online"
-        }
-
-        else if (state == "disconnected" || state == "closed") {
-            textArea.removeEventListener('keypress', (event) => { if (event.key === "Enter") { event.preventDefault(); chat() } })
-            document.querySelector("#hidden_h2").innerHTML = `${agentManager.agent.preview_name} Disconnected`
-            document.querySelector("#hidden").style.display = "block"
-            document.querySelector("#container").style.display = "none"
-            chatButton.setAttribute("disabled", true)
-            speakButton.setAttribute("disabled", true)
-            langSelect.setAttribute("disabled", true)
-            speechButton.setAttribute("disabled", true)
-            connectionLabel.innerHTML = ""
-        }
-    },
-
-    // Switching between the idle and streamed videos
-    onVideoStateChange(state) {
-      console.log("onVideoStateChange(): ", state)
-      if (state == "STOP") {
-          videoElement.muted = true
-          videoElement.srcObject = undefined
-          videoElement.src = agentManager.agent.presenter.idle_video
-      }
-      else {
-          videoElement.muted = false
-          videoElement.src = ""
-          videoElement.srcObject = srcObject
-          connectionLabel.innerHTML = "Online"
-      }
+  /** MediaStream prêt : on branche sur <video> */
+  onSrcObjectReady(stream) {
+    srcObject = stream;
+  videoElement.srcObject = stream;
+  videoElement.muted = true;     // Autorise l’autoplay
+  videoElement.play().catch(console.warn);
+  // Laissez ½ s puis réactivez le son
+  setTimeout(() => { videoElement.muted = false; }, 500);
   },
 
-    // New messages callback method
-    onNewMessage(messages, type) {
-        console.log("onNewMessage():", messages, type)
-        // We want to show only the last message from the entire 'messages' array
-        let lastIndex = messages.length - 1
-        let msg = messages[lastIndex]
-
-        // Show Rating buttons only for the Agent's (assistant) full answers
-        if (msg.role == "assistant" && messages.length != 1) {
-            if (type == "answer") {
-                answers.innerHTML += `${timeDisplay()} - [${msg.role}] : ${msg.content}  <button id='${msg.id}_plus' title='agentManager.rate() -> Rate this answer (+)'>+</button> <button id='${msg.id}_minus' title='agentManager.rate() -> Rate this answer (-)'>-</button> <br>`
-
-                document.getElementById(`${msg.id}_plus`).addEventListener('click', () => rate(msg.id, 1))
-                document.getElementById(`${msg.id}_minus`).addEventListener('click', () => rate(msg.id, -1))
-            }
-
-        } else {
-            answers.innerHTML += `${timeDisplay()} - [${msg.role}] : ${msg.content}  <br>`
-        }
-
-        // Auto-scroll to the last message 
-        answers.scrollTop = answers.scrollHeight
-    },
-
-    // Error handling
-    onError(error, errorData) {
-        connectionLabel.innerHTML = `<span style="color:red">Something went wrong :(</span>`
-        console.log("Error:", error, "Error Data", errorData)
+  /** Le flux passe en idle ou live */
+  onVideoStateChange(state) {
+    if (state === 'STOP') {
+        srcObject?.getTracks().forEach(t => t.stop()); // libère mémoire
+        srcObject = null;
+        videoElement.srcObject = null;
+        videoElement.src = agentManager.agent.presenter.idle_video;
+        videoElement.play().catch(() => {});
+    } else { // START
+        // nouveau stream → onSrcObjectReady sera rappelé ;
+        // on laisse ce callback ré-attacher le flux
     }
+  },
 
-}
+  /** États WebRTC */
+  onConnectionStateChange(state) {
+    console.debug('Connection state:', state);
 
-// 5. Define the Stream options object (Optional)
-let streamOptions = { compatibilityMode: "auto", streamWarmup: true }
+    switch (state) {
+      case 'connecting':
+        connectionLbl.textContent = 'Connecting…';
+        uiSetDisabled(true);
+        break;
 
-// Local functions to utilize the Agent's SDK methods:
+      case 'connected':
+        connectionLbl.textContent = 'Online';
+        uiSetDisabled(false);
+        // ↳ <Enter> déclenche l’envoi de chat
+        textArea.addEventListener('keypress', handleEnter);
+        break;
 
-// agentManager.speak() -> Streaming API (Bring your own LLM)
+      case 'disconnected':
+      case 'closed':
+        connectionLbl.textContent = '';
+        hiddenTitle.textContent = `${agentManager.agent.preview_name} Disconnected`;
+        hiddenPanel.hidden = false;
+        uiSetDisabled(true);
+        textArea.removeEventListener('keypress', handleEnter);
+        break;
+
+      default:
+        break;
+    }
+  },
+
+  
+
+  /** Nouveaux messages (assistant / user / system) */
+  onNewMessage(messages, type) {
+    const last = messages.at(-1);
+    if (!last) return;
+
+    const stamp = new Date().toLocaleTimeString();
+    if (last.role === 'assistant' && type === 'answer' && messages.length > 1) {
+      answers.insertAdjacentHTML(
+        'beforeend',
+        `${stamp} – [assistant] : ${last.content}
+         <button data-rate="1"  data-id="${last.id}">+</button>
+         <button data-rate="-1" data-id="${last.id}">−</button><br>`
+      );
+    } else {
+      answers.insertAdjacentHTML(
+        'beforeend',
+        `${stamp} – [${last.role}] : ${last.content}<br>`
+      );
+    }
+    answers.scrollTop = answers.scrollHeight;
+  },
+
+  /** Gestion d’erreurs */
+  onError(err, data) {
+    console.error('D-ID error', err, data);
+    connectionLbl.innerHTML = '<span style="color:#c00">Something went wrong</span>';
+  }
+};
+
+const streamOptions = { compatibilityMode: 'auto', streamWarmup: true };
+
+/* ========================================================= */
+/* 2. Initialisation SDK                                      */
+/* ========================================================= */
+(async () => {
+  try {
+    agentManager = await sdk.createAgentManager(agentId, {
+      auth,
+      callbacks,
+      streamOptions
+    });
+
+    // Meta UI
+    document.querySelector('#previewName').textContent =
+      agentManager.agent.preview_name;
+    videoElement.style.backgroundImage =
+      `url(${agentManager.agent.presenter.source_url})`;
+
+    await agentManager.connect();
+  } catch (e) {
+    console.error(e);
+    alert(
+      'Impossible de créer la connexion. Vérifiez vos identifiants "agentId" et "clientKey".'
+    );
+  }
+})();
+
+/* ========================================================= */
+/* 3. Fonctions Agent                                         */
+/* ========================================================= */
 function speak() {
-    let val = textArea.value
-    // Speak supports a minimum of 3 characters
-    if (val !== "" && val.length > 2) {
-        let speak = agentManager.speak(
-            {
-                type: "text",
-                input: val
-            }
-        )
-        console.log(`agentManager.speak("${val}")`)
-        connectionLabel.innerHTML = "Streaming.."
-    }
+  const val = textArea.value.trim();
+  console.log('Speak called with:', val);
+  if (val.length < 3) return alert('≥3 caractères nécessaires');
+  agentManager.speak({ type: 'text', input: val })
+    .catch(e => console.error('Speak error', e));
 }
 
-// agentManager.chat() -> Agents API (communicating with your created Agent and its knowledge -> Streams back the D-ID's LLM response)
 function chat() {
-    let val = textArea.value
-    if (val !== "") {
-        let chat = agentManager.chat(val)
-        console.log("agentManager.chat()")
-        connectionLabel.innerHTML = "Thinking.."
-        textArea.value = ""
-    }
+  const text = textArea.value.trim();
+  if (!text) return;
+
+  agentManager.chat(text);
+  textArea.value = '';
+  connectionLbl.textContent = 'Thinking…';
 }
 
-// agentManager.rate() -> Rating the Agent's answers - for future Agents Analytics and Insights feature
-function rate(messageID, score) {
-    let rate = agentManager.rate(messageID, score)
-    console.log(`Message ID: ${messageID} Rated:${score}\n`, "Result", rate)
+function rate(id, score) {
+  agentManager.rate(id, score).catch(console.error);
 }
 
-// agentManager.reconnect() -> Reconnect the Agent to a new WebRTC session
 function reconnect() {
-    console.log("clicked")
-    let reconnect = agentManager.reconnect()
-    console.log("agentManager.reconnect()", reconnect)
+  agentManager.reconnect().catch(console.error);
 }
 
-// agentManager.disconnect() -> Terminates the current Agent's WebRTC session (Not implemneted in this code example)
-function disconnect() {
-    let disconnect = agentManager.disconnect()
-    console.log("agentManager.disconnect()", disconnect)
+/* ========================================================= */
+/* 4. UI helpers                                              */
+/* ========================================================= */
+function uiSetDisabled(state) {
+  for (const el of [chatBtn, speakBtn, langSelect, speechBtn])
+    state ? el.setAttribute('disabled', 'true') : el.removeAttribute('disabled');
 }
 
-// JS Utility Functions: 
-// 'cleaner' time display in (HH:MM:SS)
-function timeDisplay() {
-    const currentTime = new Date();
-    const hours = currentTime.getHours().toString().padStart(2, '0');
-    const minutes = currentTime.getMinutes().toString().padStart(2, '0');
-    const seconds = currentTime.getSeconds().toString().padStart(2, '0');
-    const formattedTime = `${hours}:${minutes}:${seconds}`;
-    return formattedTime;
+function handleEnter(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    chat();
+  }
 }
 
-// Reminder to place Agent ID and Client Key at the top of this file
-if (agentId == "" || auth.clientKey == "") {
-    connectionLabel.innerHTML = `<span style='color:red; font-weight:bold'> Missing agentID and auth.clientKey variables</span>`
-
-    console.error("Missing agentID and auth.clientKey variables")
-    console.log(`Missing agentID and auth.clientKey variables:\n\nFetch the data-client-key and the data-agent-id as explained on the Agents SDK Overview Page:\nhttps://docs.d-id.com/reference/agents-sdk-overview\n\nPaste these into their respective variables at the top of the main.js file and save.`)
+/* ========================================================= */
+/* 5. Plein écran                                             */
+/* ========================================================= */
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    app.requestFullscreen().catch(console.error);
+  } else {
+    document.exitFullscreen();
+  }
 }
 
-// Event Listeners for Agent's built-in methods
-chatButton.addEventListener('click', () => chat())
-speakButton.addEventListener('click', () => speak())
-reconnectButton.addEventListener('click', () => reconnect())
-speechButton.addEventListener('click', () => toggleStartStop())
+document.addEventListener('fullscreenchange', () => {
+  app.classList.toggle('fullscreen', !!document.fullscreenElement);
+});
 
-// Focus on input and button disabling when loading
-window.addEventListener('load', () => {
-    textArea.focus(),
-        chatButton.setAttribute("disabled", true)
-    speakButton.setAttribute("disabled", true)
-    langSelect.setAttribute("disabled", true)
-    speechButton.setAttribute("disabled", true)
-})
+/* ========================================================= */
+/* 6. Écouteurs                                               */
+/* ========================================================= */
+chatBtn.addEventListener('click', chat);
+speakBtn.addEventListener('click', speak);
+reconnectBtn.addEventListener('click', reconnect);
+fullscreenBtn.addEventListener('click', toggleFullscreen);
 
-
-// *** Finally ***
-// 6. Create the 'agentManager' instance with the values created in previous steps
-let agentManager = await sdk.createAgentManager(agentId, { auth, callbacks, streamOptions });
-
-console.log("sdk.createAgentManager()", agentManager)
-
-// Displaying the Agent's name in the HTML Header
-document.querySelector("#previewName").innerHTML = agentManager.agent.preview_name
-
-// Setting the thumbnail as the video background image to avoid "flickering".
-// Set one of the following (depends on the Avatar's type): agentManager.agent.presenter.source_url / agentManager.agent.presenter.thumbnail
-document.querySelector("#videoElement").style.backgroundImage = `url(${agentManager.agent.presenter.source_url})`
-
-// agentManager.connect() method -> Creating a new WebRTC session and connecting it to the Agent
-console.log("agentManager.connect()")
-agentManager.connect()
-
-// Happy Coding! 
+// Délégation pour les boutons de rating dans #answers
+answers.addEventListener('click', (e) => {
+  if (e.target.dataset.rate) {
+    const { id } = e.target.dataset;
+    const score = Number(e.target.dataset.rate);
+    rate(id, score);
+  }
+});

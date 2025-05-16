@@ -1,48 +1,64 @@
-var recognizing;
+/* webSpeechAPI.js — version sans doublons */
+(() => {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return console.warn('SpeechRecognition API indisponible.');
 
-if (navigator.userAgent.includes("Firefox")) {
-  recognition = new SpeechRecognition()
-} else {
-  recognition = new webkitSpeechRecognition()
-}
-recognition.lang = langSelect.value
-recognition.continuous = true;
-reset();
-recognition.onend = reset;
+  const recognition   = new SpeechRecognition();
+  const speechBtn     = document.querySelector('#speechButton');
+  const textArea      = document.querySelector('#textArea');
+  const chatBtn       = document.querySelector('#chatButton');
+  const speakBtn      = document.querySelector('#speakButton');
+  const langSelect    = document.querySelector('#langSelect');
 
-recognition.onresult = function (event) {
-  console.log(event)
-  for (var i = event.resultIndex; i < event.results.length; ++i) {
-    if (event.results[i].isFinal) {
-      console.log("..")
-      textArea.value += event.results[i][0].transcript;
+  let recognizing     = false;
+  let finalTranscript = '';
+
+  /* configuration */
+  recognition.continuous      = true;               // écoute longue :contentReference[oaicite:2]{index=2}
+  recognition.interimResults  = true;               // permet l’affichage temps réel :contentReference[oaicite:3]{index=3}
+  recognition.maxAlternatives = 1;
+
+  /* résultats */
+  recognition.onresult = (evt) => {
+    let interimTranscript = '';
+    for (let i = evt.resultIndex; i < evt.results.length; ++i) {
+      const res = evt.results[i];
+      if (res.isFinal) {
+        finalTranscript += res[0].transcript + ' ';
+      } else {
+        interimTranscript += res[0].transcript;
+      }
+    }
+    /* écrase le champ plutôt que d’y concaténer */
+    textArea.value = finalTranscript + interimTranscript;
+  };
+
+  /* gestion des erreurs et arrêt */
+  recognition.onerror = (e) => { console.error('Speech error', e.error); reset(); };
+  recognition.onend   = reset;
+
+  function reset() {
+    recognizing = false;
+    speechBtn.textContent = '🎤';
+    chatBtn.disabled = speakBtn.disabled = false;
+    interimTranscript = '';      // remet la variable zéro
+  }
+
+  function toggleStartStop() {
+    recognition.lang = langSelect.value.replace('_', '-');
+    if (recognizing) return recognition.stop();
+
+    try {
+      recognition.start();
+      recognizing = true;
+      speechBtn.textContent = '⏹';
+      chatBtn.disabled = speakBtn.disabled = true;
+      finalTranscript = '';      // vide le buffer à chaque nouvelle dictée
+    } catch (err) {
+      console.error('Speech start error', err);
+      alert('Impossible de démarrer la reconnaissance vocale : ' + err.message);
     }
   }
-}
 
-function reset() {
-  recognizing = false;
-  speechButton.style.color = ""
-  speechButton.innerHTML = `<span class="material-symbols-outlined">mic</span>`;
-  chatButton.removeAttribute("disabled")
-  speakButton.removeAttribute("disabled")
-
-}
-
-function toggleStartStop() {
-  recognition.lang = langSelect.value
-  if (recognizing) {
-    textArea.focus()
-    recognition.stop();
-    reset();
-  } else {
-    textArea.value = ""
-    recognition.start();
-    recognizing = true;
-    speechButton.style.color = "red"
-    speechButton.innerHTML = "&#x23F9;"
-    chatButton.setAttribute("disabled", true)
-    speakButton.setAttribute("disabled", true)
-
-  }
-}
+  speechBtn.addEventListener('click', toggleStartStop);
+})();
