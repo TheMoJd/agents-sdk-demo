@@ -1,0 +1,25 @@
+{
+  "name": "agents-sdk-demo",
+  "version": "1.0.0",
+  "description": "**D-ID Agents SDK Demo - Vite & Vanilla JavaScript**",
+  "homepage": "https://github.com/de-id/agents-sdk-demo#readme",
+  "bugs": {
+    "url": "https://github.com/de-id/agents-sdk-demo/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/de-id/agents-sdk-demo.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "main.js",
+  "scripts": {
+    "dev": "vite --port 3000",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@d-id/client-sdk": "^1.1.0-beta.5",
+    "vite": "^6.3.5"
+  }
+}
